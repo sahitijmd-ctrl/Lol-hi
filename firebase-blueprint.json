@@ -1,0 +1,22 @@
+{
+  "entities": {
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "A chat session",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "updatedAt": { "type": "number" },
+        "messages": { "type": "list" }
+      },
+      "required": ["userId", "title", "updatedAt", "messages"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": "#/entities/ChatSession",
+      "description": "User chat sessions"
+    }
+  }
+}

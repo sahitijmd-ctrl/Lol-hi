@@ -1,0 +1,6 @@
+{
+  "name": "Nova Chat",
+  "description": "A production-ready AI chat platform with Claude-inspired UI and Gemini API integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
