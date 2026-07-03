@@ -66,19 +66,6 @@ export function HeaderModelSelector({ model, setModel, thinking, setThinking }: 
                   <span className="text-xs text-stone-500">Fastest answers and all-around help</span>
                 </div>
               </button>
-
-              <button
-                onClick={() => { setModel('gemini-2.0-flash'); setIsOpen(false); setIsThinkingOpen(false); }}
-                className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-stone-100 transition-colors text-left relative"
-              >
-                <div className="w-5 flex items-center justify-center shrink-0 mt-0.5">
-                  {model === 'gemini-2.0-flash' && <Check size={16} className="text-primary" />}
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-stone-900">Pro</span>
-                  <span className="text-xs text-stone-500">Advanced reasoning and complex tasks</span>
-                </div>
-              </button>
             </div>
 
             <div className="h-px bg-stone-100 w-full" />
@@ -111,7 +98,7 @@ export function HeaderModelSelector({ model, setModel, thinking, setThinking }: 
                         Standard
                       </button>
                       <button
-                        onClick={() => { setThinking(true); setModel('gemini-2.0-flash'); setIsOpen(false); setIsThinkingOpen(false); }}
+                        onClick={() => { setThinking(true); setModel('gemini-2.5-flash'); setIsOpen(false); setIsThinkingOpen(false); }}
                         className={cn("w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors", thinking ? "bg-white shadow-sm font-medium text-primary" : "text-stone-600 hover:bg-stone-200/50")}
                       >
                         <Sparkles size={14} /> Extended

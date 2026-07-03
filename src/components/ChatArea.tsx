@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { Message, Attachment, ChatStyle } from '../types';
-import { Send, FileText, Image as ImageIcon, Paperclip, Sparkles, Code, TerminalSquare, Copy, Check, X, File, User, Bot } from 'lucide-react';
+import { Send, FileText, Image as ImageIcon, Paperclip, Sparkles, Code, TerminalSquare, Copy, Check, X, File, User, Bot, Pencil } from 'lucide-react';
 import { cn } from '../utils';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,11 +9,33 @@ import { CodeBlock } from './CodeBlock';
 import { ChatInput } from './ChatInput';
 import { v4 as uuidv4 } from 'uuid';
 
-const MessageItem = memo(({ msg, chatStyle }: { msg: Message, chatStyle: ChatStyle }) => {
+const MessageItem = memo(({ msg, chatStyle, onEditMessage }: { msg: Message, chatStyle: ChatStyle, onEditMessage: (id: string, text: string) => void }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(msg.content);
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error('Clipboard API not available');
+      }
+    } catch (err) {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      // Move outside of viewport
+      textArea.style.position = "absolute";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+      } catch (e) {
+        console.error('Failed to copy', e);
+      }
+      document.body.removeChild(textArea);
+    }
     setCopiedId(msg.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -31,7 +53,7 @@ const MessageItem = memo(({ msg, chatStyle }: { msg: Message, chatStyle: ChatSty
           chatStyle === 'claude' && cn(
             "rounded-3xl px-5 py-4",
             msg.role === 'user' 
-              ? "max-w-[85%] bg-stone-100 text-stone-900 ml-12" 
+              ? "max-w-[85%] bg-primary text-white ml-12 shadow-sm" 
               : "bg-white border border-stone-100 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.05)] w-[85%] mr-12 text-stone-900"
           ),
           chatStyle === 'chatgpt' && cn(
@@ -85,7 +107,18 @@ const MessageItem = memo(({ msg, chatStyle }: { msg: Message, chatStyle: ChatSty
             </div>
           )}
         {msg.role === 'user' ? (
-          <div className="whitespace-pre-wrap leading-relaxed">
+          <div className="whitespace-pre-wrap leading-relaxed relative group/edit">
+            {!isEditing && (
+              <button 
+                onClick={() => setIsEditing(true)}
+                className={cn("absolute -top-8 right-0 transition-opacity p-1.5 rounded-md opacity-100 sm:opacity-0 sm:group-hover/edit:opacity-100",
+                  chatStyle === 'chatgpt' ? "hover:bg-[#404040] text-stone-400 hover:text-stone-200" : "hover:bg-stone-200/50 text-stone-500 hover:text-stone-700"
+                )}
+                title="Edit message"
+              >
+                <Pencil size={14} />
+              </button>
+            )}
             {msg.attachments && msg.attachments.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3">
                 {msg.attachments.map(att => (
@@ -102,7 +135,40 @@ const MessageItem = memo(({ msg, chatStyle }: { msg: Message, chatStyle: ChatSty
                 ))}
               </div>
             )}
-            {msg.content}
+            {isEditing ? (
+              <div className="flex flex-col gap-2 mt-2 w-full min-w-[200px] md:min-w-[300px]">
+                <textarea 
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  className={cn("w-full p-2 rounded-lg text-sm bg-transparent border outline-none resize-none min-h-[80px]", 
+                    chatStyle === 'chatgpt' ? "border-[#505050] text-stone-200 focus:border-[#707070]" : "border-stone-300 text-stone-800 focus:border-stone-400"
+                  )}
+                />
+                <div className="flex justify-end gap-2">
+                  <button 
+                    onClick={() => { setIsEditing(false); setEditText(msg.content); }}
+                    className={cn("px-3 py-1.5 rounded-md text-xs font-medium transition-colors", 
+                      chatStyle === 'chatgpt' ? "bg-[#404040] hover:bg-[#505050] text-stone-300" : "bg-stone-200 hover:bg-stone-300 text-stone-700"
+                    )}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setIsEditing(false);
+                      onEditMessage(msg.id, editText);
+                    }}
+                    className={cn("px-3 py-1.5 rounded-md text-xs font-medium transition-colors text-white", 
+                      chatStyle === 'chatgpt' ? "bg-stone-200 text-stone-900 hover:bg-white" : "bg-primary hover:bg-primary-hover"
+                    )}
+                  >
+                    Save & Submit
+                  </button>
+                </div>
+              </div>
+            ) : (
+              msg.content
+            )}
           </div>
         ) : (
           <div className="markdown-body">
@@ -164,10 +230,11 @@ const MessageItem = memo(({ msg, chatStyle }: { msg: Message, chatStyle: ChatSty
 interface ChatAreaProps {
   messages: Message[];
   onSendMessage: (msg: string, attachments?: Attachment[]) => void;
+  onEditMessage: (messageId: string, newContent: string) => void;
   chatStyle: ChatStyle;
 }
 
-export function ChatArea({ messages, onSendMessage, chatStyle }: ChatAreaProps) {
+export function ChatArea({ messages, onSendMessage, onEditMessage, chatStyle }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -220,7 +287,7 @@ export function ChatArea({ messages, onSendMessage, chatStyle }: ChatAreaProps) 
           ) : (
             <div className="space-y-8 pb-12 pt-4 text-stone-900">
               {messages.map((msg) => (
-                <MessageItem key={msg.id} msg={msg} chatStyle={chatStyle} />
+                <MessageItem key={msg.id} msg={msg} chatStyle={chatStyle} onEditMessage={onEditMessage} />
               ))}
               <div ref={bottomRef} className="h-4" />
             </div>

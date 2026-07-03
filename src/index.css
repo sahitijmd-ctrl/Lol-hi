@@ -26,24 +26,29 @@
   --theme-primary-hover: #c45b3a;
 }
 
-.theme-blue {
-  --theme-primary: #3b82f6;
-  --theme-primary-hover: #2563eb;
+.theme-ocean {
+  --theme-primary: #0ea5e9;
+  --theme-primary-hover: #0284c7;
 }
 
-.theme-green {
+.theme-emerald {
   --theme-primary: #10b981;
   --theme-primary-hover: #059669;
 }
 
-.theme-yellow {
-  --theme-primary: #eab308;
-  --theme-primary-hover: #ca8a04;
+.theme-sunflower {
+  --theme-primary: #f59e0b;
+  --theme-primary-hover: #d97706;
 }
 
-.theme-red {
-  --theme-primary: #ef4444;
-  --theme-primary-hover: #dc2626;
+.theme-rose {
+  --theme-primary: #f43f5e;
+  --theme-primary-hover: #e11d48;
+}
+
+.theme-midnight {
+  --theme-primary: #6366f1;
+  --theme-primary-hover: #4f46e5;
 }
 
 @layer base {

@@ -5,7 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -90,7 +90,7 @@ app.post('/api/chat', async (req, res) => {
     
     // Add thinking level if requested
     if (thinking) {
-       config.thinkingConfig = { thinkingBudgetTokens: 1024 }; 
+       config.thinkingConfig = { thinkingBudget: 4096 }; 
     }
 
     // Set headers for SSE stream
@@ -122,16 +122,31 @@ app.post('/api/chat', async (req, res) => {
     console.error('API Chat Error:', error);
     let errorMsg = error.message || 'An error occurred';
     try {
-      if (typeof errorMsg === 'string' && errorMsg.includes('"status":"UNAVAILABLE"')) {
-        errorMsg = 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.';
-      } else if (typeof errorMsg === 'string' && errorMsg.startsWith('{')) {
-        const parsed = JSON.parse(errorMsg);
-        if (parsed.error && parsed.error.message) {
-          if (typeof parsed.error.message === 'string' && parsed.error.message.startsWith('{')) {
-             const inner = JSON.parse(parsed.error.message);
-             if (inner.error && inner.error.message) errorMsg = inner.error.message;
-          } else {
-             errorMsg = parsed.error.message;
+      if (typeof errorMsg === 'string') {
+        if (errorMsg.includes('"status":"UNAVAILABLE"')) {
+          errorMsg = 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.';
+        } else {
+          // Extract JSON from strings like "ApiError: {...}"
+          const jsonMatch = errorMsg.match(/\{.*\}/s);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed.error && parsed.error.message) {
+              if (typeof parsed.error.message === 'string') {
+                 const innerMatch = parsed.error.message.match(/\{.*\}/s);
+                 if (innerMatch) {
+                   const inner = JSON.parse(innerMatch[0]);
+                   if (inner.error && inner.error.message) errorMsg = inner.error.message;
+                 } else {
+                   errorMsg = parsed.error.message;
+                 }
+              } else {
+                errorMsg = parsed.error.message;
+              }
+            }
+          }
+          
+          if (errorMsg.includes('Quota exceeded') || errorMsg.includes('429')) {
+             errorMsg = 'API quota exceeded. Please try again in a little while or switch to a different model if available.';
           }
         }
       }

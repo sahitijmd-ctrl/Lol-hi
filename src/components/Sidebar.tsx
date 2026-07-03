@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ChatSession, AppTheme, ChatStyle } from '../types';
 import { cn } from '../utils';
-import { MessageSquare, Plus, PanelLeftClose, Trash2, Palette, Layout, LogIn, LogOut, User } from 'lucide-react';
+import { MessageSquare, Plus, PanelLeftClose, Trash2, Palette, Layout, LogIn, LogOut, User, Search, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from './AuthProvider';
 
@@ -17,18 +17,25 @@ interface SidebarProps {
   onThemeChange: (theme: AppTheme) => void;
   currentStyle: ChatStyle;
   onStyleChange: (style: ChatStyle) => void;
+  onOpenSettings: () => void;
 }
 
 const THEMES: { id: AppTheme; color: string }[] = [
-  { id: 'default', color: 'bg-[#dd6e4c]' },
-  { id: 'blue', color: 'bg-blue-500' },
-  { id: 'green', color: 'bg-green-500' },
-  { id: 'yellow', color: 'bg-yellow-500' },
-  { id: 'red', color: 'bg-red-500' },
+  { id: 'default', color: 'bg-orange-500' },
+  { id: 'ocean', color: 'bg-sky-500' },
+  { id: 'emerald', color: 'bg-emerald-500' },
+  { id: 'sunflower', color: 'bg-amber-500' },
+  { id: 'rose', color: 'bg-rose-500' },
+  { id: 'midnight', color: 'bg-indigo-500' },
 ];
 
-export function Sidebar({ isOpen, onClose, sessions, activeSessionId, onSelectSession, onNewChat, onDeleteSession, currentTheme, onThemeChange, currentStyle, onStyleChange }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, sessions, activeSessionId, onSelectSession, onNewChat, onDeleteSession, currentTheme, onThemeChange, currentStyle, onStyleChange, onOpenSettings }: SidebarProps) {
   const { user, signIn, logOut } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const filteredSessions = sessions.filter(session => 
+    session.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
   
   return (
     <>
@@ -68,10 +75,29 @@ export function Sidebar({ isOpen, onClose, sessions, activeSessionId, onSelectSe
             </button>
           </div>
 
+          <div className="px-3 pb-2">
+            <div className={cn("flex items-center px-2 py-1.5 rounded-lg border", 
+                currentStyle === 'chatgpt' ? "bg-[#212121] border-[#303030] text-stone-300" : 
+                currentStyle === 'gemini' ? "bg-white/50 border-stone-200/50 text-stone-700" : 
+                "bg-white border-stone-200 text-stone-700"
+              )}>
+              <Search size={14} className={cn(currentStyle === 'chatgpt' ? "text-stone-400" : "text-stone-400")} />
+              <input 
+                type="text" 
+                placeholder="Search chats..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={cn("bg-transparent border-none outline-none text-sm w-full ml-2",
+                  currentStyle === 'chatgpt' ? "placeholder:text-stone-500" : "placeholder:text-stone-400"
+                )}
+              />
+            </div>
+          </div>
+
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
         <div className={cn("text-xs font-medium mb-2 px-2 uppercase tracking-wider", currentStyle === 'chatgpt' ? "text-stone-500" : "text-stone-500")}>Recent Chats</div>
         <AnimatePresence>
-          {sessions.map(session => (
+          {filteredSessions.map(session => (
             <motion.div 
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
@@ -106,56 +132,21 @@ export function Sidebar({ isOpen, onClose, sessions, activeSessionId, onSelectSe
         {sessions.length === 0 && (
           <div className={cn("text-sm px-2 py-4", currentStyle === 'chatgpt' ? "text-stone-500" : "text-stone-500")}>No recent chats.</div>
         )}
+        {sessions.length > 0 && filteredSessions.length === 0 && (
+          <div className={cn("text-sm px-2 py-4", currentStyle === 'chatgpt' ? "text-stone-500" : "text-stone-500")}>No chats found.</div>
+        )}
       </div>
       
       <div className={cn("p-4 border-t flex flex-col gap-4", currentStyle === 'chatgpt' ? "border-[#303030]" : currentStyle === 'gemini' ? "border-transparent" : "border-stone-200/60")}>
-        <div className={cn("flex flex-col gap-2 text-sm font-medium", currentStyle === 'chatgpt' ? "text-stone-300" : "text-stone-700")}>
-          <div className="flex items-center gap-2">
-            <Layout size={16} /> Style
-          </div>
-          <div className={cn("flex items-center gap-1.5 p-1 rounded-lg", currentStyle === 'chatgpt' ? "bg-[#303030]" : currentStyle === 'gemini' ? "bg-stone-200/50" : "bg-stone-200/50")}>
-            <button
-              onClick={() => onStyleChange('claude')}
-              className={cn("flex-1 px-2 py-1.5 text-xs rounded-md transition-all font-medium", 
-                currentStyle === 'claude' ? "bg-white text-stone-900 shadow-sm" : 
-                currentStyle === 'chatgpt' ? "text-stone-400 hover:text-stone-200" : "text-stone-500 hover:text-stone-700"
-              )}
-            >Claude</button>
-            <button
-              onClick={() => onStyleChange('chatgpt')}
-              className={cn("flex-1 px-2 py-1.5 text-xs rounded-md transition-all font-medium", 
-                currentStyle === 'chatgpt' ? "bg-[#404040] text-white shadow-sm" : "text-stone-500 hover:text-stone-700"
-              )}
-            >ChatGPT</button>
-            <button
-              onClick={() => onStyleChange('gemini')}
-              className={cn("flex-1 px-2 py-1.5 text-xs rounded-md transition-all font-medium", 
-                currentStyle === 'gemini' ? "bg-white text-stone-900 shadow-sm" : 
-                currentStyle === 'chatgpt' ? "text-stone-400 hover:text-stone-200" : "text-stone-500 hover:text-stone-700"
-              )}
-            >Gemini</button>
-          </div>
-        </div>
-        
-        <div className="flex items-center justify-between">
-           <div className={cn("flex items-center gap-2 text-sm font-medium", currentStyle === 'chatgpt' ? "text-stone-300" : "text-stone-700")}>
-             <Palette size={16} /> Theme
-           </div>
-           <div className="flex items-center gap-1.5">
-             {THEMES.map(t => (
-               <button
-                 key={t.id}
-                 onClick={() => onThemeChange(t.id)}
-                 className={cn(
-                   "w-5 h-5 rounded-full border-2 transition-all hover:scale-110",
-                   t.color,
-                   currentTheme === t.id ? (currentStyle === 'chatgpt' ? "border-white scale-110" : "border-stone-700 scale-110") : "border-transparent"
-                 )}
-                 title={t.id}
-               />
-             ))}
-           </div>
-        </div>
+        <button 
+          onClick={onOpenSettings}
+          className={cn("w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors border",
+            currentStyle === 'chatgpt' ? "bg-[#303030] hover:bg-[#404040] text-stone-300 border-transparent" : "bg-white hover:bg-stone-50 border-stone-200 text-stone-700"
+          )}
+        >
+          <Settings size={16} /> Application Settings
+        </button>
+
         <div className={cn("text-xs flex flex-col gap-2 p-2.5 rounded-xl border", 
           currentStyle === 'chatgpt' ? "bg-[#212121] border-[#303030] text-stone-400" : 
           currentStyle === 'gemini' ? "bg-white/50 border-stone-200/30 text-stone-600" : 

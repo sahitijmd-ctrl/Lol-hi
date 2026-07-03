@@ -11,8 +11,27 @@ export function CodeBlock({ node, className, children, ...props }: any) {
   const [isPreview, setIsPreview] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(codeString);
+  const copyToClipboard = async () => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(codeString);
+      } else {
+        throw new Error('Clipboard API not available');
+      }
+    } catch (err) {
+      const textArea = document.createElement("textarea");
+      textArea.value = codeString;
+      textArea.style.position = "absolute";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+      } catch (e) {
+        console.error('Failed to copy', e);
+      }
+      document.body.removeChild(textArea);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

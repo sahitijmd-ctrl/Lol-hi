@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { HeaderModelSelector } from './components/HeaderModelSelector';
+import { SettingsModal } from './components/SettingsModal';
 import { ChatSession, Message, ModelType, AppTheme, Attachment } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { cn } from './utils';
@@ -36,7 +37,7 @@ export default function App() {
   const activeSession = sessions.find(s => s.id === activeSessionId) || null;
   const messages = activeSession?.messages || [];
 
-  const [model, setModel] = useState<ModelType>('gemini-2.0-flash');
+  const [model, setModel] = useState<ModelType>('gemini-2.5-flash');
   const [thinking, setThinking] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
@@ -46,6 +47,10 @@ export default function App() {
   const [chatStyle, setChatStyle] = useState<import('./types').ChatStyle>(() => {
     return (localStorage.getItem('nova_chat_style') as import('./types').ChatStyle) || 'claude';
   });
+  const [globalSystemPrompt, setGlobalSystemPrompt] = useState(() => {
+    return localStorage.getItem('nova_system_prompt') || '';
+  });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (window.innerWidth >= 768) {
@@ -67,6 +72,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('nova_chat_style', chatStyle);
   }, [chatStyle]);
+
+  useEffect(() => {
+    localStorage.setItem('nova_system_prompt', globalSystemPrompt);
+  }, [globalSystemPrompt]);
 
   const handleNewChat = () => {
     const newSession: ChatSession = {
@@ -97,46 +106,21 @@ export default function App() {
     }
   }, [loading, sessions.length]);
 
-  const handleSendMessage = async (content: string, attachments: Attachment[] = []) => {
-    let currentSessionId = activeSessionId;
-    let newSessionObj = sessions.find(s => s.id === currentSessionId);
-    
-    if (!currentSessionId || !newSessionObj) {
-      currentSessionId = uuidv4();
-      newSessionObj = { id: currentSessionId, title: content.slice(0, 30) || 'New Chat', updatedAt: Date.now(), messages: [] };
-      if (user) {
-        await saveSession(user.uid, newSessionObj);
-      } else {
-        setSessions(prev => [newSessionObj!, ...prev]);
-      }
-      setActiveSessionId(currentSessionId);
-    } else if (newSessionObj.messages.length === 0) {
-      newSessionObj = { ...newSessionObj, title: content.slice(0, 30) || 'New Chat', updatedAt: Date.now() };
-    }
-
-    const userMessage: Message = { id: uuidv4(), role: 'user', content, attachments, timestamp: Date.now() };
-    const modelMessageId = uuidv4();
-    const tempModelMessage: Message = { id: modelMessageId, role: 'model', content: '', timestamp: Date.now() + 1 };
-
-    newSessionObj = { ...newSessionObj, messages: [...newSessionObj.messages, userMessage, tempModelMessage], updatedAt: Date.now() };
-    
-    if (user) {
-      await saveSession(user.uid, newSessionObj);
-    } else {
-      setSessions(prev => prev.map(s => s.id === currentSessionId ? newSessionObj! : s));
-    }
-
+  const streamResponse = async (
+    currentSessionId: string,
+    newSessionObj: ChatSession,
+    modelMessageId: string,
+    messagesToSend: Message[]
+  ) => {
     try {
-      // Need to omit tempMessage from sending to API
-      const messagesToSend = newSessionObj.messages.slice(0, -1);
-      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: messagesToSend,
           model,
-          thinking
+          thinking,
+          systemInstruction: globalSystemPrompt || undefined
         })
       });
 
@@ -218,6 +202,76 @@ export default function App() {
     }
   };
 
+  const handleSendMessage = async (content: string, attachments: Attachment[] = []) => {
+    let currentSessionId = activeSessionId;
+    let newSessionObj = sessions.find(s => s.id === currentSessionId);
+    
+    if (!currentSessionId || !newSessionObj) {
+      currentSessionId = uuidv4();
+      newSessionObj = { id: currentSessionId, title: content.slice(0, 30) || 'New Chat', updatedAt: Date.now(), messages: [] };
+      if (user) {
+        await saveSession(user.uid, newSessionObj);
+      } else {
+        setSessions(prev => [newSessionObj!, ...prev]);
+      }
+      setActiveSessionId(currentSessionId);
+    } else if (newSessionObj.messages.length === 0) {
+      newSessionObj = { ...newSessionObj, title: content.slice(0, 30) || 'New Chat', updatedAt: Date.now() };
+    }
+
+    const userMessage: Message = { id: uuidv4(), role: 'user', content, attachments, timestamp: Date.now() };
+    const modelMessageId = uuidv4();
+    const tempModelMessage: Message = { id: modelMessageId, role: 'model', content: '', timestamp: Date.now() + 1 };
+
+    newSessionObj = { ...newSessionObj, messages: [...newSessionObj.messages, userMessage, tempModelMessage], updatedAt: Date.now() };
+    
+    if (user) {
+      await saveSession(user.uid, newSessionObj);
+    } else {
+      setSessions(prev => prev.map(s => s.id === currentSessionId ? newSessionObj! : s));
+    }
+
+    const messagesToSend = newSessionObj.messages.slice(0, -1);
+    await streamResponse(currentSessionId, newSessionObj, modelMessageId, messagesToSend);
+  };
+
+  const handleEditMessage = async (messageId: string, newContent: string) => {
+    if (!activeSessionId) return;
+    
+    let currentSessionId = activeSessionId;
+    let currentSession = sessions.find(s => s.id === currentSessionId);
+    if (!currentSession) return;
+    
+    const messageIndex = currentSession.messages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) return;
+    
+    const previousMessages = currentSession.messages.slice(0, messageIndex);
+    
+    const editedMessage: Message = { 
+      ...currentSession.messages[messageIndex],
+      content: newContent,
+      timestamp: Date.now()
+    };
+    
+    const modelMessageId = uuidv4();
+    const tempModelMessage: Message = { id: modelMessageId, role: 'model', content: '', timestamp: Date.now() + 1 };
+    
+    let newSessionObj: ChatSession = {
+       ...currentSession,
+       messages: [...previousMessages, editedMessage, tempModelMessage],
+       updatedAt: Date.now()
+    };
+    
+    if (user) {
+      await saveSession(user.uid, newSessionObj);
+    } else {
+      setSessions(prev => prev.map(s => s.id === currentSessionId ? newSessionObj : s));
+    }
+
+    const messagesToSend = newSessionObj.messages.slice(0, -1);
+    await streamResponse(currentSessionId, newSessionObj, modelMessageId, messagesToSend);
+  };
+
   return (
     <div className={`flex h-[100dvh] w-full bg-stone-50 overflow-hidden text-stone-900 relative ${theme !== 'default' ? `theme-${theme}` : ''}`}>
       <Sidebar 
@@ -238,6 +292,7 @@ export default function App() {
         onThemeChange={setTheme}
         currentStyle={chatStyle}
         onStyleChange={setChatStyle}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
       
       <main className={cn(
@@ -284,11 +339,14 @@ export default function App() {
             )}>
                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path><path d="M12 12v9"></path><path d="m8 17 4 4 4-4"></path></svg>
             </button>
-            <button className={cn("p-2 rounded-xl transition-colors", 
-              chatStyle === 'chatgpt' ? "hover:bg-[#303030] text-stone-300" :
-              chatStyle === 'gemini' ? "hover:bg-stone-100 text-stone-600" :
-              "hover:bg-stone-200/50 text-stone-600"
-            )}>
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className={cn("p-2 rounded-xl transition-colors", 
+                chatStyle === 'chatgpt' ? "hover:bg-[#303030] text-stone-300" :
+                chatStyle === 'gemini' ? "hover:bg-stone-100 text-stone-600" :
+                "hover:bg-stone-200/50 text-stone-600"
+              )}
+            >
                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             </button>
           </div>
@@ -297,9 +355,23 @@ export default function App() {
         <ChatArea 
           messages={messages} 
           onSendMessage={handleSendMessage}
+          onEditMessage={handleEditMessage}
           chatStyle={chatStyle}
         />
       </main>
+
+      <SettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        systemPrompt={globalSystemPrompt}
+        onSave={(prompt, style, themeVal) => {
+          setGlobalSystemPrompt(prompt);
+          setChatStyle(style);
+          setTheme(themeVal);
+        }}
+        chatStyle={chatStyle}
+        currentTheme={theme}
+      />
     </div>
   );
 }
